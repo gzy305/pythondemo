@@ -1,275 +1,190 @@
-from flask import Flask, render_template, jsonify, request, session
+from flask import Flask, render_template, request, jsonify, session
 import random
 import json
+import os
+import time
 
 app = Flask(__name__)
-app.secret_key = 'doudizhu_game_secret_key'
+app.secret_key = os.urandom(24)
 
-# 定义扑克牌
-def create_deck():
-    suits = ["♠", "♥", "♣", "♦"]
-    values = ["3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A", "2"]
-    cards = []
+# 麻将牌定义
+class Tile:
+    def __init__(self, suit, value):
+        self.suit = suit  # 牌的类型：筒、条、万、风、箭
+        self.value = value  # 牌的数值
 
-    # 生成扑克牌
-    for value in values:
-        for suit in suits:
-            cards.append({"value": value, "suit": suit})
+    def __str__(self):
+        return f"{self.suit}_{self.value}"
 
-    # 添加大小王
-    cards.append({"value": "Joker", "suit": "Small"})
-    cards.append({"value": "Joker", "suit": "Big"})
+    def to_dict(self):
+        return {
+            'suit': self.suit,
+            'value': self.value,
+            'id': f"{self.suit}_{self.value}"
+        }
 
-    return cards
+# 游戏类
+class MahjongGame:
+    def __init__(self):
+        self.tiles = []  # 牌堆
+        self.players = []  # 玩家
+        self.current_player = 0  # 当前玩家索引
+        self.game_state = "waiting"  # 游戏状态
+        self.last_discarded = None  # 最后一张弃牌
+        self.initialize_game()
 
-# 计算牌的权重，用于排序和比较
-def card_weight(card):
-    values = {"3": 3, "4": 4, "5": 5, "6": 6, "7": 7, "8": 8, "9": 9, "10": 10,
-              "J": 11, "Q": 12, "K": 13, "A": 14, "2": 15}
+    def initialize_game(self):
+        # 创建牌堆
+        self.create_tiles()
+        # 洗牌
+        self.shuffle_tiles()
+        # 创建四个玩家
+        self.players = [
+            {"name": "玩家", "type": "human", "hand": [], "discarded": [], "ready": False},
+            {"name": "东家", "type": "ai", "hand": [], "discarded": [], "ready": False},
+            {"name": "南家", "type": "ai", "hand": [], "discarded": [], "ready": False},
+            {"name": "西家", "type": "ai", "hand": [], "discarded": [], "ready": False}
+        ]
+        # 发牌
+        self.deal_tiles()
+        # 设置游戏状态
+        self.game_state = "playing"
+        self.current_player = 0
 
-    if card["value"] == "Joker" and card["suit"] == "Small":
-        return 16
-    elif card["value"] == "Joker" and card["suit"] == "Big":
-        return 17
-    else:
-        return values[card["value"]]
+    def create_tiles(self):
+        self.tiles = []
+        # 筒、条、万，各9种，每种4张
+        for suit in ["筒", "条", "万"]:
+            for value in range(1, 10):
+                for _ in range(4):
+                    self.tiles.append(Tile(suit, value))
 
-# 判断牌型
-def identify_card_pattern(cards):
-    if not cards:
-        return "Invalid"
+        # 风牌：东、南、西、北，每种4张
+        for value in ["东", "南", "西", "北"]:
+            for _ in range(4):
+                self.tiles.append(Tile("风", value))
 
-    # 单牌
-    if len(cards) == 1:
-        return "Single"
+        # 箭牌：中、发、白，每种4张
+        for value in ["中", "发", "白"]:
+            for _ in range(4):
+                self.tiles.append(Tile("箭", value))
 
-    # 对子
-    if len(cards) == 2 and cards[0]["value"] == cards[1]["value"]:
-        return "Pair"
+    def shuffle_tiles(self):
+        random.shuffle(self.tiles)
 
-    # 三张
-    if len(cards) == 3 and cards[0]["value"] == cards[1]["value"] == cards[2]["value"]:
-        return "Triplet"
+    def deal_tiles(self):
+        # 每个玩家发13张牌
+        for _ in range(13):
+            for player in self.players:
+                player["hand"].append(self.tiles.pop())
 
-    # 三带一
-    if len(cards) == 4:
-        values = [card["value"] for card in cards]
-        for value in set(values):
-            if values.count(value) == 3:
-                return "Triplet_with_Single"
+        # 给每个玩家的手牌排序
+        for player in self.players:
+            self.sort_hand(player["hand"])
 
-    # 三带对
-    if len(cards) == 5:
-        values = [card["value"] for card in cards]
-        value_counts = {v: values.count(v) for v in set(values)}
-        if 3 in value_counts.values() and 2 in value_counts.values():
-            return "Triplet_with_Pair"
+    def sort_hand(self, hand):
+        # 按照牌的类型和数值排序
+        def sort_key(tile):
+            suit_order = {"筒": 0, "条": 1, "万": 2, "风": 3, "箭": 4}
 
-    # 炸弹
-    if len(cards) == 4 and cards[0]["value"] == cards[1]["value"] == cards[2]["value"] == cards[3]["value"]:
-        return "Bomb"
+            if tile.suit in ["风", "箭"]:
+                value_order = {"东": 1, "南": 2, "西": 3, "北": 4, "中": 1, "发": 2, "白": 3}
+                return suit_order[tile.suit], value_order.get(tile.value, 0)
+            else:
+                return suit_order[tile.suit], tile.value
 
-    # 王炸
-    if len(cards) == 2 and "Joker" in [cards[0]["value"], cards[1]["value"]]:
-        if "Small" in [cards[0]["suit"], cards[1]["suit"]] and "Big" in [cards[0]["suit"], cards[1]["suit"]]:
-            return "Rocket"
+        hand.sort(key=sort_key)
 
-    # 顺子 (5张或更多的连续单牌)
-    if len(cards) >= 5:
-        values = [card["value"] for card in cards]
-        if "2" not in values and "Joker" not in values:  # 2和王不能加入顺子
-            weights = [card_weight(card) for card in cards]
-            weights.sort()
-            if len(set(weights)) == len(weights):  # 确保没有重复
-                is_consecutive = True
-                for i in range(1, len(weights)):
-                    if weights[i] != weights[i-1] + 1:
-                        is_consecutive = False
-                        break
-                if is_consecutive:
-                    return "Straight"
+    def draw_tile(self, player_idx):
+        if not self.tiles:
+            return None
 
-    # 其他牌型可以继续添加，如：连对、飞机等
+        new_tile = self.tiles.pop()
+        self.players[player_idx]["hand"].append(new_tile)
+        self.sort_hand(self.players[player_idx]["hand"])
+        return new_tile
 
-    return "Invalid"
+    def discard_tile(self, player_idx, tile_idx):
+        player = self.players[player_idx]
+        discarded_tile = player["hand"].pop(tile_idx)
+        player["discarded"].append(discarded_tile)
+        self.last_discarded = discarded_tile
+        return discarded_tile
 
-# 比较两手牌的大小
-def compare_cards(previous_cards, current_cards):
-    previous_pattern = identify_card_pattern(previous_cards)
-    current_pattern = identify_card_pattern(current_cards)
+    def ai_play(self, player_idx):
+        # 简单AI逻辑：摸一张牌，然后随机丢弃一张
+        self.draw_tile(player_idx)
+        time.sleep(1)  # 添加延迟，让AI思考的过程更自然
 
-    # 王炸最大
-    if current_pattern == "Rocket":
-        return True
+        # 简单策略：丢弃最后一张牌（刚摸到的）
+        discarded_idx = len(self.players[player_idx]["hand"]) - 1
 
-    # 炸弹可以打任何非炸弹牌型
-    if current_pattern == "Bomb" and previous_pattern != "Bomb" and previous_pattern != "Rocket":
-        return True
+        # 更复杂的策略可以在这里实现，例如：
+        # 1. 优先保留成对的牌
+        # 2. 优先保留连续的牌
+        # 3. 丢弃孤立的牌
 
-    # 牌型相同，比较大小
-    if current_pattern == previous_pattern:
-        # 对于单牌、对子、三张、炸弹等简单牌型
-        if current_pattern in ["Single", "Pair", "Triplet", "Bomb"]:
-            return card_weight(current_cards[0]) > card_weight(previous_cards[0])
+        return self.discard_tile(player_idx, discarded_idx)
 
-        # 对于顺子，比较最大牌
-        if current_pattern == "Straight" and len(current_cards) == len(previous_cards):
-            current_max = max([card_weight(card) for card in current_cards])
-            previous_max = max([card_weight(card) for card in previous_cards])
-            return current_max > previous_max
+    def next_turn(self):
+        self.current_player = (self.current_player + 1) % 4
 
-        # 其他复杂牌型可以继续添加
+        # 如果是AI玩家的回合
+        if self.players[self.current_player]["type"] == "ai":
+            self.ai_play(self.current_player)
+            self.next_turn()  # 继续到下一个玩家
 
-    return False
+    def get_game_state(self, player_idx=0):
+        return {
+            "game_state": self.game_state,
+            "current_player": self.current_player,
+            "player_hand": [tile.to_dict() for tile in self.players[player_idx]["hand"]],
+            "player_discarded": [tile.to_dict() for tile in self.players[player_idx]["discarded"]],
+            "opponents": [
+                {
+                    "name": player["name"],
+                    "discarded": [tile.to_dict() for tile in player["discarded"]],
+                    "hand_count": len(player["hand"])
+                } for i, player in enumerate(self.players) if i != player_idx
+            ],
+            "tiles_left": len(self.tiles),
+            "last_discarded": self.last_discarded.to_dict() if self.last_discarded else None
+        }
 
 # 初始化游戏
-@app.route('/init_game', methods=['POST'])
-def init_game():
-    deck = create_deck()
-    random.shuffle(deck)
+game = None
 
-    # 分配牌给三个玩家
-    player_hands = [[] for _ in range(3)]
-    for i, card in enumerate(deck[:-3]):  # 留3张牌作为底牌
-        player_hands[i % 3].append(card)
-
-    # 底牌
-    landlord_cards = deck[-3:]
-
-    # 为每个玩家的牌排序
-    for hand in player_hands:
-        hand.sort(key=card_weight)
-
-    # 保存游戏状态到会话
-    session['player_hands'] = player_hands
-    session['landlord_cards'] = landlord_cards
-    session['current_player'] = 0  # 从第一个玩家开始
-    session['landlord'] = None  # 地主未确定
-    session['last_played'] = []  # 最后一次出的牌
-    session['last_player'] = None  # 最后一次出牌的玩家
-    session['pass_count'] = 0  # 连续不出的次数
-
-    return jsonify({
-        'player_hands': player_hands,
-        'landlord_cards': landlord_cards,
-        'current_player': 0
-    })
-
-# 叫地主
-@app.route('/bid_landlord', methods=['POST'])
-def bid_landlord():
-    data = request.get_json()
-    player_id = data.get('player_id')
-    bid = data.get('bid')  # True表示叫地主，False表示不叫
-
-    if session.get('landlord') is not None:
-        return jsonify({'error': 'Landlord already determined'}), 400
-
-    if bid:
-        session['landlord'] = player_id
-        # 地主获得底牌
-        player_hands = session.get('player_hands')
-        player_hands[player_id].extend(session.get('landlord_cards'))
-        player_hands[player_id].sort(key=card_weight)
-        session['player_hands'] = player_hands
-
-        return jsonify({
-            'landlord': player_id,
-            'player_hands': player_hands,
-            'landlord_cards': session.get('landlord_cards')
-        })
-    else:
-        # 如果不叫地主，轮到下一个玩家
-        next_player = (player_id + 1) % 3
-        session['current_player'] = next_player
-
-        return jsonify({
-            'current_player': next_player
-        })
-
-# 出牌
-@app.route('/play_cards', methods=['POST'])
-def play_cards():
-    data = request.get_json()
-    player_id = data.get('player_id')
-    card_indices = data.get('card_indices')  # 选择出的牌的索引
-
-    if session.get('landlord') is None:
-        return jsonify({'error': 'Landlord not determined yet'}), 400
-
-    if player_id != session.get('current_player'):
-        return jsonify({'error': 'Not your turn'}), 400
-
-    player_hands = session.get('player_hands')
-    player_hand = player_hands[player_id]
-
-    # 如果选择不出牌
-    if not card_indices:
-        if session.get('last_player') == player_id:
-            return jsonify({'error': 'You must play cards as you are the last player'}), 400
-
-        # 记录连续不出的次数
-        session['pass_count'] = session.get('pass_count', 0) + 1
-
-        # 如果连续两人都不出，则最后出牌的玩家获得出牌权
-        if session.get('pass_count') == 2:
-            session['current_player'] = session.get('last_player')
-            session['pass_count'] = 0
-            session['last_played'] = []
-        else:
-            session['current_player'] = (player_id + 1) % 3
-
-        return jsonify({
-            'current_player': session.get('current_player'),
-            'pass_count': session.get('pass_count')
-        })
-
-    # 获取玩家选择的牌
-    selected_cards = [player_hand[i] for i in card_indices]
-
-    # 验证牌型
-    card_pattern = identify_card_pattern(selected_cards)
-    if card_pattern == "Invalid":
-        return jsonify({'error': 'Invalid card pattern'}), 400
-
-    # 如果有人已经出过牌，需要比较大小
-    last_played = session.get('last_played')
-    if last_played and session.get('pass_count') < 2:
-        if not compare_cards(last_played, selected_cards):
-            return jsonify({'error': 'Your cards are not bigger than the last played cards'}), 400
-
-    # 从玩家手牌中移除已出的牌
-    for index in sorted(card_indices, reverse=True):
-        player_hand.pop(index)
-
-    # 更新游戏状态
-    session['player_hands'] = player_hands
-    session['last_played'] = selected_cards
-    session['last_player'] = player_id
-    session['pass_count'] = 0
-
-    # 检查玩家是否已经出完牌
-    if not player_hand:
-        winner = "地主" if player_id == session.get('landlord') else "农民"
-        return jsonify({
-            'game_over': True,
-            'winner': winner,
-            'winner_id': player_id
-        })
-
-    # 轮到下一个玩家
-    session['current_player'] = (player_id + 1) % 3
-
-    return jsonify({
-        'current_player': session.get('current_player'),
-        'last_played': selected_cards,
-        'player_hands': player_hands
-    })
-
-# 渲染游戏页面
 @app.route('/')
 def index():
-    return render_template('doudizhu.html')
+    return render_template('mahjong.html')
+
+@app.route('/start_game', methods=['POST'])
+def start_game():
+    global game
+    game = MahjongGame()
+    return jsonify(game.get_game_state())
+
+@app.route('/draw_tile', methods=['POST'])
+def draw_tile():
+    global game
+    if game and game.game_state == "playing" and game.current_player == 0:
+        tile = game.draw_tile(0)
+        if tile:
+            return jsonify({"success": True, "tile": tile.to_dict(), "game_state": game.get_game_state()})
+        else:
+            game.game_state = "draw"
+            return jsonify({"success": False, "message": "没有牌了，游戏结束平局", "game_state": game.get_game_state()})
+    return jsonify({"success": False, "message": "不是你的回合"})
+
+@app.route('/discard_tile', methods=['POST'])
+def discard_tile():
+    global game
+    if game and game.game_state == "playing" and game.current_player == 0:
+        tile_idx = int(request.json.get('tile_idx'))
+        game.discard_tile(0, tile_idx)
+        game.next_turn()
+        return jsonify({"success": True, "game_state": game.get_game_state()})
+    return jsonify({"success": False, "message": "不是你的回合"})
 
 if __name__ == '__main__':
     app.run(debug=True)
