@@ -83,6 +83,15 @@
             margin-bottom: 10px;
         }
 
+        .player-score {
+            font-size: 0.9em;
+            background-color: #ffd700;
+            color: #000;
+            padding: 2px 5px;
+            border-radius: 10px;
+            margin-left: 5px;
+        }
+
         .player-hand {
             display: flex;
             flex-wrap: wrap;
@@ -95,6 +104,26 @@
             justify-content: center;
             margin-top: 10px;
             max-width: 300px;
+        }
+
+        .player-melds, .opponent-melds {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            margin: 10px 0;
+        }
+
+        .meld {
+            display: flex;
+            margin: 0 5px 5px 0;
+            background-color: rgba(255, 255, 255, 0.2);
+            padding: 3px;
+            border-radius: 5px;
+        }
+
+        .meld-concealed .tile:not(:last-child) {
+            background-color: #8b0000;
+            color: #8b0000;
         }
 
         .tile {
@@ -111,7 +140,7 @@
             font-size: 1.2em;
             cursor: pointer;
             position: relative;
-            transition: transform 0.2s;
+            transition: transform 0.2s, box-shadow 0.2s;
         }
 
         .tile:hover {
@@ -122,6 +151,15 @@
         .tile.selected {
             border: 2px solid red;
             transform: translateY(-10px);
+        }
+
+        .tile.highlighted {
+            animation: highlight 1s infinite alternate;
+        }
+
+        @keyframes highlight {
+            from { box-shadow: 0 0 5px gold; }
+            to { box-shadow: 0 0 15px gold; }
         }
 
         .hidden-tile {
@@ -150,16 +188,48 @@
             border-radius: 5px;
             cursor: pointer;
             font-size: 1em;
+            transition: background-color 0.3s, transform 0.2s;
         }
 
         button:hover {
             background-color: #a52a2a;
+            transform: scale(1.05);
+        }
+
+        button:active {
+            transform: scale(0.95);
         }
 
         button:disabled {
             background-color: #999;
             cursor: not-allowed;
+            transform: none;
         }
+
+        .action-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin: 15px 0;
+        }
+
+        .action-btn {
+            padding: 8px 15px;
+            font-size: 1.1em;
+            font-weight: bold;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+
+        #btn-pong { background-color: #2980b9; }
+        #btn-kong { background-color: #27ae60; }
+        #btn-win { background-color: #e74c3c; }
+        #btn-pass { background-color: #7f8c8d; }
 
         .game-info {
             margin-top: 20px;
@@ -169,10 +239,14 @@
 
         .game-message {
             font-size: 1.2em;
-            margin-top: 10px;
+            margin: 10px 0;
             padding: 10px;
             border-radius: 5px;
             background-color: rgba(0, 0, 0, 0.7);
+            min-height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
         .tile-筒 { color: #1e90ff; }
@@ -184,6 +258,12 @@
         .last-discarded {
             border: 2px solid gold;
             box-shadow: 0 0 10px gold;
+            animation: glow 1s infinite alternate;
+        }
+
+        @keyframes glow {
+            from { box-shadow: 0 0 5px gold; }
+            to { box-shadow: 0 0 15px gold; }
         }
 
         /* 弃牌区样式 */
@@ -223,11 +303,81 @@
             visibility: hidden;
             opacity: 0;
             transition: opacity 0.3s;
+            z-index: 10;
         }
 
         .tile:hover .tooltip {
             visibility: visible;
             opacity: 1;
+        }
+
+        /* 胡牌动画 */
+        .win-animation {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            animation: fadeIn 0.5s;
+        }
+
+        .win-content {
+            background-color: #ffd700;
+            padding: 30px;
+            border-radius: 20px;
+            text-align: center;
+            animation: scaleIn 0.5s;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes scaleIn {
+            from { transform: scale(0); }
+            to { transform: scale(1); }
+        }
+
+        /* 新牌动画 */
+        .new-tile {
+            animation: newTileAnimation 0.5s;
+        }
+
+        @keyframes newTileAnimation {
+            from {
+                transform: scale(0.5);
+                opacity: 0;
+            }
+            to {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+
+        /* 响应式布局调整 */
+        @media (max-width: 1200px) {
+            .game-board {
+                height: auto;
+                min-height: 800px;
+            }
+
+            .tile {
+                width: 35px;
+                height: 50px;
+                font-size: 1em;
+            }
+
+            .discarded-tile {
+                width: 25px;
+                height: 40px;
+                font-size: 0.85em;
+            }
         }
     </style>
 </head>
@@ -240,8 +390,9 @@
     <div class="game-board">
         <!-- 北家（上方） -->
         <div class="player-area north">
-            <div class="player-name">东家</div>
+            <div class="player-name">东家 <span class="player-score" id="north-score">0</span></div>
             <div class="opponent-hand" id="north-hand"></div>
+            <div class="opponent-melds" id="north-melds"></div>
             <div class="discard-area">
                 <div class="discard-title">弃牌区</div>
                 <div class="player-discarded" id="north-discarded"></div>
@@ -250,8 +401,9 @@
 
         <!-- 西家（左方） -->
         <div class="player-area west">
-            <div class="player-name">南家</div>
+            <div class="player-name">南家 <span class="player-score" id="west-score">0</span></div>
             <div class="opponent-hand" id="west-hand"></div>
+            <div class="opponent-melds" id="west-melds"></div>
             <div class="discard-area">
                 <div class="discard-title">弃牌区</div>
                 <div class="player-discarded" id="west-discarded"></div>
@@ -267,17 +419,33 @@
 
             <div class="game-message" id="game-message">点击开始游戏按钮开始</div>
 
+            <!-- 玩家可执行的操作按钮 -->
+            <div class="action-buttons" id="action-buttons" style="display: none;">
+                <button id="btn-pong" class="action-btn">碰</button>
+                <button id="btn-kong" class="action-btn">杠</button>
+                <button id="btn-win" class="action-btn">胡</button>
+                <button id="btn-pass" class="action-btn">过</button>
+            </div>
+
             <div class="controls">
                 <button id="start-game">开始游戏</button>
                 <button id="draw-tile" disabled>摸牌</button>
                 <button id="discard-tile" disabled>出牌</button>
             </div>
+
+            <!-- 添加音效元素 -->
+            <audio id="sound-draw" src="/static/sounds/draw.mp3" preload="auto"></audio>
+            <audio id="sound-discard" src="/static/sounds/discard.mp3" preload="auto"></audio>
+            <audio id="sound-pong" src="/static/sounds/pong.mp3" preload="auto"></audio>
+            <audio id="sound-kong" src="/static/sounds/kong.mp3" preload="auto"></audio>
+            <audio id="sound-win" src="/static/sounds/win.mp3" preload="auto"></audio>
         </div>
 
         <!-- 东家（右方） -->
         <div class="player-area east">
-            <div class="player-name">西家</div>
+            <div class="player-name">西家 <span class="player-score" id="east-score">0</span></div>
             <div class="opponent-hand" id="east-hand"></div>
+            <div class="opponent-melds" id="east-melds"></div>
             <div class="discard-area">
                 <div class="discard-title">弃牌区</div>
                 <div class="player-discarded" id="east-discarded"></div>
@@ -286,8 +454,9 @@
 
         <!-- 南家（下方，玩家） -->
         <div class="player-area south">
-            <div class="player-name">玩家</div>
+            <div class="player-name">玩家 <span class="player-score" id="player-score">0</span></div>
             <div class="player-hand" id="player-hand"></div>
+            <div class="player-melds" id="player-melds"></div>
             <div class="discard-area">
                 <div class="discard-title">弃牌区</div>
                 <div class="player-discarded" id="player-discarded"></div>
@@ -303,29 +472,119 @@
         const discardTileBtn = document.getElementById('discard-tile');
         const playerHandEl = document.getElementById('player-hand');
         const playerDiscardedEl = document.getElementById('player-discarded');
+        const playerMeldsEl = document.getElementById('player-melds');
         const gameMessageEl = document.getElementById('game-message');
         const tilesLeftEl = document.getElementById('tiles-left');
         const currentPlayerEl = document.getElementById('current-player');
+        const actionButtonsEl = document.getElementById('action-buttons');
+        const playerScoreEl = document.getElementById('player-score');
+
+        // 操作按钮
+        const btnPong = document.getElementById('btn-pong');
+        const btnKong = document.getElementById('btn-kong');
+        const btnWin = document.getElementById('btn-win');
+        const btnPass = document.getElementById('btn-pass');
+
+        // 音效元素
+        const soundDraw = document.getElementById('sound-draw');
+        const soundDiscard = document.getElementById('sound-discard');
+        const soundPong = document.getElementById('sound-pong');
+        const soundKong = document.getElementById('sound-kong');
+        const soundWin = document.getElementById('sound-win');
 
         // 对手元素
         const opponentEls = {
             'north': {
                 hand: document.getElementById('north-hand'),
-                discarded: document.getElementById('north-discarded')
+                discarded: document.getElementById('north-discarded'),
+                melds: document.getElementById('north-melds'),
+                score: document.getElementById('north-score')
             },
             'west': {
                 hand: document.getElementById('west-hand'),
-                discarded: document.getElementById('west-discarded')
+                discarded: document.getElementById('west-discarded'),
+                melds: document.getElementById('west-melds'),
+                score: document.getElementById('west-score')
             },
             'east': {
                 hand: document.getElementById('east-hand'),
-                discarded: document.getElementById('east-discarded')
+                discarded: document.getElementById('east-discarded'),
+                melds: document.getElementById('east-melds'),
+                score: document.getElementById('east-score')
             }
         };
 
         // 游戏状态
         let gameState = null;
         let selectedTileIdx = null;
+        let isMuted = false;
+
+        // 播放音效函数
+        function playSound(sound) {
+            if (!isMuted) {
+                // 重置音频
+                sound.pause();
+                sound.currentTime = 0;
+
+                // 播放
+                const playPromise = sound.play();
+
+                // 处理可能的错误
+                if (playPromise !== undefined) {
+                    playPromise.catch(error => {
+                        console.error('播放音效失败:', error);
+                    });
+                }
+            }
+        }
+
+        // 显示操作按钮
+        function showActionButtons(actions) {
+            if (!actions || Object.keys(actions).length === 0) {
+                actionButtonsEl.style.display = 'none';
+                return;
+            }
+
+            // 显示/隐藏相应的按钮
+            btnPong.style.display = actions.pong ? 'block' : 'none';
+            btnKong.style.display = (actions.kong || actions.concealed_kong || actions.add_kong) ? 'block' : 'none';
+            btnWin.style.display = (actions.win || actions.self_win) ? 'block' : 'none';
+            btnPass.style.display = 'block';
+
+            // 显示操作按钮区域
+            actionButtonsEl.style.display = 'flex';
+        }
+
+        // 隐藏操作按钮
+        function hideActionButtons() {
+            actionButtonsEl.style.display = 'none';
+        }
+
+        // 显示胡牌动画
+        function showWinAnimation(winnerName, score) {
+            // 创建遮罩和内容
+            const winAnimation = document.createElement('div');
+            winAnimation.className = 'win-animation';
+
+            const winContent = document.createElement('div');
+            winContent.className = 'win-content';
+            winContent.innerHTML = `
+                    <h2>${winnerName}胡牌了！</h2>
+                    <p>得分: +${score}</p>
+                    <button id="close-win-animation">继续</button>
+                `;
+
+            winAnimation.appendChild(winContent);
+            document.body.appendChild(winAnimation);
+
+            // 播放胡牌音效
+            playSound(soundWin);
+
+            // 点击继续按钮关闭动画
+            document.getElementById('close-win-animation').addEventListener('click', function() {
+                document.body.removeChild(winAnimation);
+            });
+        }
 
         // 开始游戏
         startGameBtn.addEventListener('click', function() {
@@ -360,9 +619,21 @@
                 .then(response => response.json())
                 .then(data => {
                     if (data.success) {
+                        // 播放摸牌音效
+                        playSound(soundDraw);
+
                         gameState = data.game_state;
                         updateGameDisplay();
-                        gameMessageEl.textContent = '请选择一张牌出牌';
+
+                        // 检查是否有特殊操作（自摸、暗杠、加杠）
+                        if (data.possible_actions && Object.keys(data.possible_actions).length > 0) {
+                            gameMessageEl.textContent = '可以执行特殊操作';
+                            showActionButtons(data.possible_actions);
+                        } else {
+                            gameMessageEl.textContent = '请选择一张牌出牌';
+                            hideActionButtons();
+                        }
+
                         drawTileBtn.disabled = true;
                         discardTileBtn.disabled = false;
                     } else {
@@ -394,13 +665,169 @@
                 .then(response => response.json())
                 .then(data => {
                     if (data.success) {
+                        // 播放出牌音效
+                        playSound(soundDiscard);
+
                         selectedTileIdx = null;
                         gameState = data.game_state;
                         updateGameDisplay();
+
+                        // 检查是否等待玩家操作（碰、杠、胡）
+                        if (gameState.waiting_for_action) {
+                            gameMessageEl.textContent = '可以执行操作';
+                            showActionButtons(gameState.possible_actions);
+                            drawTileBtn.disabled = true;
+                            discardTileBtn.disabled = true;
+                        } else {
+                            gameMessageEl.textContent = '轮到对手回合';
+                            hideActionButtons();
+
+                            // 如果轮到玩家，启用摸牌按钮
+                            if (gameState.current_player === 0 && gameState.game_state === 'playing') {
+                                drawTileBtn.disabled = false;
+                                discardTileBtn.disabled = true;
+                                gameMessageEl.textContent = '你的回合，请摸牌';
+                            }
+                        }
+                    } else {
+                        gameMessageEl.textContent = data.message;
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    gameMessageEl.textContent = '操作失败，请重试';
+                });
+        });
+
+        // 碰牌
+        btnPong.addEventListener('click', function() {
+            fetch('/pong', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // 播放碰牌音效
+                        playSound(soundPong);
+
+                        gameState = data.game_state;
+                        updateGameDisplay();
+
+                        gameMessageEl.textContent = '碰牌成功，请出牌';
+                        hideActionButtons();
+
+                        drawTileBtn.disabled = true;
+                        discardTileBtn.disabled = false;
+                    } else {
+                        gameMessageEl.textContent = data.message;
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    gameMessageEl.textContent = '操作失败，请重试';
+                });
+        });
+
+        // 杠牌
+        btnKong.addEventListener('click', function() {
+            // 检查是什么类型的杠
+            let endpoint = '/kong';
+            let data = {};
+
+            if (gameState.possible_actions.concealed_kong) {
+                // 暗杠
+                data.tile_key = gameState.possible_actions.concealed_kong[0].join(',');
+            } else if (gameState.possible_actions.add_kong) {
+                // 加杠
+                data.tile_idx = gameState.possible_actions.add_kong[0];
+            }
+
+            fetch(endpoint, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(data)
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // 播放杠牌音效
+                        playSound(soundKong);
+
+                        gameState = data.game_state;
+                        updateGameDisplay();
+
+                        gameMessageEl.textContent = '杠牌成功，请出牌';
+                        hideActionButtons();
+
+                        drawTileBtn.disabled = true;
+                        discardTileBtn.disabled = false;
+                    } else {
+                        gameMessageEl.textContent = data.message;
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    gameMessageEl.textContent = '操作失败，请重试';
+                });
+        });
+
+        // 胡牌
+        btnWin.addEventListener('click', function() {
+            fetch('/win', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        gameState = data.game_state;
+                        updateGameDisplay();
+
+                        // 显示胡牌动画
+                        showWinAnimation('玩家', data.result.score);
+
+                        hideActionButtons();
+                        gameMessageEl.textContent = '胡牌！游戏结束';
+
+                        drawTileBtn.disabled = true;
+                        discardTileBtn.disabled = true;
+                        startGameBtn.disabled = false;
+                    } else {
+                        gameMessageEl.textContent = data.message;
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    gameMessageEl.textContent = '操作失败，请重试';
+                });
+        });
+
+        // 过（跳过操作）
+        btnPass.addEventListener('click', function() {
+            fetch('/pass_action', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        gameState = data.game_state;
+                        updateGameDisplay();
+
                         gameMessageEl.textContent = '轮到对手回合';
+                        hideActionButtons();
 
                         // 如果轮到玩家，启用摸牌按钮
-                        if (gameState.current_player === 0) {
+                        if (gameState.current_player === 0 && gameState.game_state === 'playing') {
                             drawTileBtn.disabled = false;
                             discardTileBtn.disabled = true;
                             gameMessageEl.textContent = '你的回合，请摸牌';
@@ -425,6 +852,9 @@
             // 更新玩家弃牌
             updatePlayerDiscarded();
 
+            // 更新玩家组合牌（碰、杠）
+            updatePlayerMelds();
+
             // 更新对手状态
             updateOpponents();
 
@@ -434,15 +864,56 @@
             const playerNames = ['玩家', '东家', '南家', '西家'];
             currentPlayerEl.textContent = `当前玩家: ${playerNames[gameState.current_player]}`;
 
+            // 更新分数
+            playerScoreEl.textContent = gameState.player_score;
+
             // 更新按钮状态
             if (gameState.game_state !== 'playing') {
                 drawTileBtn.disabled = true;
                 discardTileBtn.disabled = true;
-            } else if (gameState.current_player === 0) {
-                drawTileBtn.disabled = false;
-            } else {
+
+                if (gameState.game_state === 'win') {
+                    let winnerName = '无人';
+                    for (let i = 0; i < 4; i++) {
+                        if (i === 0 && gameState.player_winning_hand) {
+                            winnerName = '玩家';
+                            break;
+                        } else if (i > 0 && i-1 < gameState.opponents.length && gameState.opponents[i-1].winning_hand) {
+                            winnerName = gameState.opponents[i-1].name;
+                            break;
+                        }
+                    }
+                    gameMessageEl.textContent = `${winnerName}胡牌，游戏结束`;
+
+                    if (winnerName === '玩家') {
+                        // 游戏已经结束，显示开始新游戏按钮
+                        startGameBtn.disabled = false;
+                    }
+                } else if (gameState.game_state === 'draw') {
+                    gameMessageEl.textContent = '流局，无人胡牌';
+                    startGameBtn.disabled = false;
+                }
+            } else if (gameState.waiting_for_action) {
+                // 等待玩家操作（碰、杠、胡）
                 drawTileBtn.disabled = true;
                 discardTileBtn.disabled = true;
+                showActionButtons(gameState.possible_actions);
+            } else if (gameState.current_player === 0) {
+                // 玩家回合
+                if (gameState.possible_actions && Object.keys(gameState.possible_actions).length > 0) {
+                    // 有可选操作（自摸、暗杠、加杠）
+                    showActionButtons(gameState.possible_actions);
+                } else {
+                    hideActionButtons();
+                }
+
+                // 正常出牌
+                drawTileBtn.disabled = !discardTileBtn.disabled;
+            } else {
+                // 对手回合
+                drawTileBtn.disabled = true;
+                discardTileBtn.disabled = true;
+                hideActionButtons();
             }
         }
 
@@ -453,6 +924,12 @@
             gameState.player_hand.forEach((tile, idx) => {
                 const tileEl = document.createElement('div');
                 tileEl.className = `tile tile-${tile.suit}`;
+
+                // 如果是刚摸到的牌，添加动画效果
+                if (idx === gameState.player_hand.length - 1 && gameState.current_player === 0) {
+                    tileEl.classList.add('new-tile');
+                }
+
                 tileEl.textContent = tile.value;
 
                 // 添加提示
@@ -463,7 +940,39 @@
 
                 // 选择牌的逻辑
                 tileEl.addEventListener('click', function() {
-                    if (discardTileBtn.disabled) return;
+                    // 检查是否可以出牌
+                    if (discardTileBtn.disabled) {
+                        // 检查是否可以进行加杠
+                        if (gameState.possible_actions &&
+                            gameState.possible_actions.add_kong &&
+                            gameState.possible_actions.add_kong.includes(idx)) {
+
+                            // 执行加杠操作
+                            fetch('/kong', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json'
+                                },
+                                body: JSON.stringify({
+                                    'tile_idx': idx
+                                })
+                            })
+                                .then(response => response.json())
+                                .then(data => {
+                                    if (data.success) {
+                                        playSound(soundKong);
+                                        gameState = data.game_state;
+                                        updateGameDisplay();
+                                    } else {
+                                        gameMessageEl.textContent = data.message;
+                                    }
+                                })
+                                .catch(error => {
+                                    console.error('Error:', error);
+                                });
+                        }
+                        return;
+                    }
 
                     // 移除之前选中的牌的样式
                     document.querySelectorAll('.tile.selected').forEach(el => {
@@ -473,6 +982,45 @@
                     tileEl.classList.add('selected');
                     selectedTileIdx = idx;
                 });
+
+                // 检查是否可以暗杠这张牌
+                if (gameState.possible_actions && gameState.possible_actions.concealed_kong) {
+                    const key = [tile.suit, tile.value];
+                    const stringKey = key.join(',');
+
+                    for (const kongKey of gameState.possible_actions.concealed_kong) {
+                        const kongStringKey = kongKey.join(',');
+                        if (kongStringKey === stringKey) {
+                            tileEl.classList.add('highlighted');
+
+                            // 添加点击暗杠事件
+                            tileEl.addEventListener('click', function() {
+                                fetch('/kong', {
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type': 'application/json'
+                                    },
+                                    body: JSON.stringify({
+                                        'tile_key': stringKey
+                                    })
+                                })
+                                    .then(response => response.json())
+                                    .then(data => {
+                                        if (data.success) {
+                                            playSound(soundKong);
+                                            gameState = data.game_state;
+                                            updateGameDisplay();
+                                        }
+                                    })
+                                    .catch(error => {
+                                        console.error('Error:', error);
+                                    });
+                            });
+
+                            break;
+                        }
+                    }
+                }
 
                 playerHandEl.appendChild(tileEl);
             });
@@ -502,6 +1050,35 @@
             });
         }
 
+        // 更新玩家组合牌（碰、杠）
+        function updatePlayerMelds() {
+            playerMeldsEl.innerHTML = '';
+
+            if (!gameState.player_melds) return;
+
+            gameState.player_melds.forEach(meld => {
+                const meldEl = document.createElement('div');
+                meldEl.className = `meld ${meld.is_concealed ? 'meld-concealed' : ''}`;
+
+                // 添加牌到组合中
+                meld.tiles.forEach(tile => {
+                    const tileEl = document.createElement('div');
+                    tileEl.className = `tile discarded-tile tile-${tile.suit}`;
+                    tileEl.textContent = tile.value;
+
+                    // 添加提示
+                    const tooltip = document.createElement('div');
+                    tooltip.className = 'tooltip';
+                    tooltip.textContent = `${tile.suit}${tile.value}`;
+                    tileEl.appendChild(tooltip);
+
+                    meldEl.appendChild(tileEl);
+                });
+
+                playerMeldsEl.appendChild(meldEl);
+            });
+        }
+
         // 更新对手状态
         function updateOpponents() {
             if (!gameState.opponents || gameState.opponents.length < 3) return;
@@ -512,12 +1089,41 @@
                 const opponent = gameState.opponents[i];
                 const el = opponentEls[opponents[i]];
 
+                // 更新分数
+                el.score.textContent = opponent.score;
+
                 // 更新对手手牌（显示背面）
                 el.hand.innerHTML = '';
                 for (let j = 0; j < opponent.hand_count; j++) {
                     const tileEl = document.createElement('div');
                     tileEl.className = 'tile hidden-tile';
                     el.hand.appendChild(tileEl);
+                }
+
+                // 更新对手组合牌（碰、杠）
+                el.melds.innerHTML = '';
+                if (opponent.melds) {
+                    opponent.melds.forEach(meld => {
+                        const meldEl = document.createElement('div');
+                        meldEl.className = `meld ${meld.is_concealed ? 'meld-concealed' : ''}`;
+
+                        // 添加牌到组合中
+                        meld.tiles.forEach(tile => {
+                            const tileEl = document.createElement('div');
+                            tileEl.className = `tile discarded-tile tile-${tile.suit}`;
+                            tileEl.textContent = tile.value;
+
+                            // 添加提示
+                            const tooltip = document.createElement('div');
+                            tooltip.className = 'tooltip';
+                            tooltip.textContent = `${tile.suit}${tile.value}`;
+                            tileEl.appendChild(tooltip);
+
+                            meldEl.appendChild(tileEl);
+                        });
+
+                        el.melds.appendChild(meldEl);
+                    });
                 }
 
                 // 更新对手弃牌
@@ -542,6 +1148,51 @@
                 });
             }
         }
+
+        // 添加键盘快捷键
+        document.addEventListener('keydown', function(e) {
+            // 空格键 - 摸牌
+            if (e.code === 'Space' && !drawTileBtn.disabled) {
+                drawTileBtn.click();
+                e.preventDefault();
+            }
+
+            // Enter键 - 出牌
+            if (e.code === 'Enter' && !discardTileBtn.disabled && selectedTileIdx !== null) {
+                discardTileBtn.click();
+                e.preventDefault();
+            }
+
+            // P键 - 碰牌
+            if (e.code === 'KeyP' && btnPong.style.display !== 'none' && actionButtonsEl.style.display !== 'none') {
+                btnPong.click();
+                e.preventDefault();
+            }
+
+            // K键 - 杠牌
+            if (e.code === 'KeyK' && btnKong.style.display !== 'none' && actionButtonsEl.style.display !== 'none') {
+                btnKong.click();
+                e.preventDefault();
+            }
+
+            // H键 - 胡牌
+            if (e.code === 'KeyH' && btnWin.style.display !== 'none' && actionButtonsEl.style.display !== 'none') {
+                btnWin.click();
+                e.preventDefault();
+            }
+
+            // Esc键 - 过
+            if (e.code === 'Escape' && actionButtonsEl.style.display !== 'none') {
+                btnPass.click();
+                e.preventDefault();
+            }
+
+            // M键 - 静音/取消静音
+            if (e.code === 'KeyM') {
+                isMuted = !isMuted;
+                e.preventDefault();
+            }
+        });
     });
 </script>
 </body>
