@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>中国麻将</title>
+    <style>
+        body {
+            font-family: 'Microsoft YaHei', Arial, sans-serif;
+            background-color: #f5f5dc;
+            margin: 0;
+            padding: 0;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            text-align: center;
+            padding: 10px;
+            background-color: #8b0000;
+            color: white;
+            border-radius: 10px 10px 0 0;
+        }
+
+        .game-board {
+            display: grid;
+            grid-template-columns: 1fr 3fr 1fr;
+            grid-template-rows: 1fr 3fr 1fr;
+            grid-template-areas:
+                ". north ."
+                "west center east"
+                ". south .";
+            height: 800px;
+            background-color: #076324;
+            border-radius: 0 0 10px 10px;
+            padding: 20px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        .player-area {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 10px;
+            background-color: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            margin: 10px;
+        }
+
+        .north {
+            grid-area: north;
+        }
+
+        .west {
+            grid-area: west;
+        }
+
+        .east {
+            grid-area: east;
+        }
+
+        .south {
+            grid-area: south;
+        }
+
+        .center {
+            grid-area: center;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .player-name {
+            font-weight: bold;
+            color: white;
+            margin-bottom: 10px;
+        }
+
+        .player-hand {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .player-discarded {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            margin-top: 10px;
+            max-width: 300px;
+        }
+
+        .tile {
+            width: 40px;
+            height: 60px;
+            background-color: white;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            margin: 2px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-weight: bold;
+            font-size: 1.2em;
+            cursor: pointer;
+            position: relative;
+            transition: transform 0.2s;
+        }
+
+        .tile:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        .tile.selected {
+            border: 2px solid red;
+            transform: translateY(-10px);
+        }
+
+        .hidden-tile {
+            background-color: #8b0000;
+            color: #8b0000;
+        }
+
+        .discarded-tile {
+            width: 30px;
+            height: 45px;
+            font-size: 0.9em;
+        }
+
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        button {
+            padding: 10px 20px;
+            background-color: #8b0000;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1em;
+        }
+
+        button:hover {
+            background-color: #a52a2a;
+        }
+
+        button:disabled {
+            background-color: #999;
+            cursor: not-allowed;
+        }
+
+        .game-info {
+            margin-top: 20px;
+            text-align: center;
+            color: white;
+        }
+
+        .game-message {
+            font-size: 1.2em;
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 5px;
+            background-color: rgba(0, 0, 0, 0.7);
+        }
+
+        .tile-筒 { color: #1e90ff; }
+        .tile-条 { color: #32cd32; }
+        .tile-万 { color: #ff4500; }
+        .tile-风 { color: #9932cc; }
+        .tile-箭 { color: #ff8c00; }
+
+        .last-discarded {
+            border: 2px solid gold;
+            box-shadow: 0 0 10px gold;
+        }
+
+        /* 弃牌区样式 */
+        .discard-area {
+            width: 100%;
+            padding: 10px;
+            background-color: rgba(0, 0, 0, 0.2);
+            border-radius: 10px;
+            margin-top: 10px;
+        }
+
+        .discard-title {
+            color: white;
+            font-size: 0.9em;
+            margin-bottom: 5px;
+        }
+
+        /* 对手牌区样式 */
+        .opponent-hand {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 10px;
+        }
+
+        /* 提示样式 */
+        .tooltip {
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: black;
+            color: white;
+            padding: 5px;
+            border-radius: 3px;
+            font-size: 0.8em;
+            white-space: nowrap;
+            visibility: hidden;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .tile:hover .tooltip {
+            visibility: visible;
+            opacity: 1;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <header>
+        <h1>中国麻将</h1>
+    </header>
+
+    <div class="game-board">
+        <!-- 北家（上方） -->
+        <div class="player-area north">
+            <div class="player-name">东家</div>
+            <div class="opponent-hand" id="north-hand"></div>
+            <div class="discard-area">
+                <div class="discard-title">弃牌区</div>
+                <div class="player-discarded" id="north-discarded"></div>
+            </div>
+        </div>
+
+        <!-- 西家（左方） -->
+        <div class="player-area west">
+            <div class="player-name">南家</div>
+            <div class="opponent-hand" id="west-hand"></div>
+            <div class="discard-area">
+                <div class="discard-title">弃牌区</div>
+                <div class="player-discarded" id="west-discarded"></div>
+            </div>
+        </div>
+
+        <!-- 中央区域 -->
+        <div class="center">
+            <div class="game-info">
+                <div id="tiles-left">剩余牌数: 0</div>
+                <div id="current-player">当前玩家: 无</div>
+            </div>
+
+            <div class="game-message" id="game-message">点击开始游戏按钮开始</div>
+
+            <div class="controls">
+                <button id="start-game">开始游戏</button>
+                <button id="draw-tile" disabled>摸牌</button>
+                <button id="discard-tile" disabled>出牌</button>
+            </div>
+        </div>
+
+        <!-- 东家（右方） -->
+        <div class="player-area east">
+            <div class="player-name">西家</div>
+            <div class="opponent-hand" id="east-hand"></div>
+            <div class="discard-area">
+                <div class="discard-title">弃牌区</div>
+                <div class="player-discarded" id="east-discarded"></div>
+            </div>
+        </div>
+
+        <!-- 南家（下方，玩家） -->
+        <div class="player-area south">
+            <div class="player-name">玩家</div>
+            <div class="player-hand" id="player-hand"></div>
+            <div class="discard-area">
+                <div class="discard-title">弃牌区</div>
+                <div class="player-discarded" id="player-discarded"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const startGameBtn = document.getElementById('start-game');
+        const drawTileBtn = document.getElementById('draw-tile');
+        const discardTileBtn = document.getElementById('discard-tile');
+        const playerHandEl = document.getElementById('player-hand');
+        const playerDiscardedEl = document.getElementById('player-discarded');
+        const gameMessageEl = document.getElementById('game-message');
+        const tilesLeftEl = document.getElementById('tiles-left');
+        const currentPlayerEl = document.getElementById('current-player');
+
+        // 对手元素
+        const opponentEls = {
+            'north': {
+                hand: document.getElementById('north-hand'),
+                discarded: document.getElementById('north-discarded')
+            },
+            'west': {
+                hand: document.getElementById('west-hand'),
+                discarded: document.getElementById('west-discarded')
+            },
+            'east': {
+                hand: document.getElementById('east-hand'),
+                discarded: document.getElementById('east-discarded')
+            }
+        };
+
+        // 游戏状态
+        let gameState = null;
+        let selectedTileIdx = null;
+
+        // 开始游戏
+        startGameBtn.addEventListener('click', function() {
+            fetch('/start_game', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            })
+                .then(response => response.json())
+                .then(data => {
+                    gameState = data;
+                    updateGameDisplay();
+                    gameMessageEl.textContent = '游戏开始，请摸牌';
+                    startGameBtn.disabled = true;
+                    drawTileBtn.disabled = false;
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    gameMessageEl.textContent = '游戏启动失败，请重试';
+                });
+        });
+
+        // 摸牌
+        drawTileBtn.addEventListener('click', function() {
+            fetch('/draw_tile', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        gameState = data.game_state;
+                        updateGameDisplay();
+                        gameMessageEl.textContent = '请选择一张牌出牌';
+                        drawTileBtn.disabled = true;
+                        discardTileBtn.disabled = false;
+                    } else {
+                        gameMessageEl.textContent = data.message;
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    gameMessageEl.textContent = '操作失败，请重试';
+                });
+        });
+
+        // 出牌
+        discardTileBtn.addEventListener('click', function() {
+            if (selectedTileIdx === null) {
+                gameMessageEl.textContent = '请先选择一张牌';
+                return;
+            }
+
+            fetch('/discard_tile', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    'tile_idx': selectedTileIdx
+                })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        selectedTileIdx = null;
+                        gameState = data.game_state;
+                        updateGameDisplay();
+                        gameMessageEl.textContent = '轮到对手回合';
+
+                        // 如果轮到玩家，启用摸牌按钮
+                        if (gameState.current_player === 0) {
+                            drawTileBtn.disabled = false;
+                            discardTileBtn.disabled = true;
+                            gameMessageEl.textContent = '你的回合，请摸牌';
+                        }
+                    } else {
+                        gameMessageEl.textContent = data.message;
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    gameMessageEl.textContent = '操作失败，请重试';
+                });
+        });
+
+        // 更新游戏显示
+        function updateGameDisplay() {
+            if (!gameState) return;
+
+            // 更新玩家手牌
+            updatePlayerHand();
+
+            // 更新玩家弃牌
+            updatePlayerDiscarded();
+
+            // 更新对手状态
+            updateOpponents();
+
+            // 更新游戏信息
+            tilesLeftEl.textContent = `剩余牌数: ${gameState.tiles_left}`;
+
+            const playerNames = ['玩家', '东家', '南家', '西家'];
+            currentPlayerEl.textContent = `当前玩家: ${playerNames[gameState.current_player]}`;
+
+            // 更新按钮状态
+            if (gameState.game_state !== 'playing') {
+                drawTileBtn.disabled = true;
+                discardTileBtn.disabled = true;
+            } else if (gameState.current_player === 0) {
+                drawTileBtn.disabled = false;
+            } else {
+                drawTileBtn.disabled = true;
+                discardTileBtn.disabled = true;
+            }
+        }
+
+        // 更新玩家手牌
+        function updatePlayerHand() {
+            playerHandEl.innerHTML = '';
+
+            gameState.player_hand.forEach((tile, idx) => {
+                const tileEl = document.createElement('div');
+                tileEl.className = `tile tile-${tile.suit}`;
+                tileEl.textContent = tile.value;
+
+                // 添加提示
+                const tooltip = document.createElement('div');
+                tooltip.className = 'tooltip';
+                tooltip.textContent = `${tile.suit}${tile.value}`;
+                tileEl.appendChild(tooltip);
+
+                // 选择牌的逻辑
+                tileEl.addEventListener('click', function() {
+                    if (discardTileBtn.disabled) return;
+
+                    // 移除之前选中的牌的样式
+                    document.querySelectorAll('.tile.selected').forEach(el => {
+                        el.classList.remove('selected');
+                    });
+
+                    tileEl.classList.add('selected');
+                    selectedTileIdx = idx;
+                });
+
+                playerHandEl.appendChild(tileEl);
+            });
+        }
+
+        // 更新玩家弃牌
+        function updatePlayerDiscarded() {
+            playerDiscardedEl.innerHTML = '';
+
+            gameState.player_discarded.forEach(tile => {
+                const tileEl = document.createElement('div');
+                tileEl.className = `tile discarded-tile tile-${tile.suit}`;
+                tileEl.textContent = tile.value;
+
+                // 添加提示
+                const tooltip = document.createElement('div');
+                tooltip.className = 'tooltip';
+                tooltip.textContent = `${tile.suit}${tile.value}`;
+                tileEl.appendChild(tooltip);
+
+                // 如果是最后一张弃牌，添加高亮
+                if (gameState.last_discarded && tile.id === gameState.last_discarded.id) {
+                    tileEl.classList.add('last-discarded');
+                }
+
+                playerDiscardedEl.appendChild(tileEl);
+            });
+        }
+
+        // 更新对手状态
+        function updateOpponents() {
+            if (!gameState.opponents || gameState.opponents.length < 3) return;
+
+            const opponents = ['north', 'west', 'east'];
+
+            for (let i = 0; i < 3; i++) {
+                const opponent = gameState.opponents[i];
+                const el = opponentEls[opponents[i]];
+
+                // 更新对手手牌（显示背面）
+                el.hand.innerHTML = '';
+                for (let j = 0; j < opponent.hand_count; j++) {
+                    const tileEl = document.createElement('div');
+                    tileEl.className = 'tile hidden-tile';
+                    el.hand.appendChild(tileEl);
+                }
+
+                // 更新对手弃牌
+                el.discarded.innerHTML = '';
+                opponent.discarded.forEach(tile => {
+                    const tileEl = document.createElement('div');
+                    tileEl.className = `tile discarded-tile tile-${tile.suit}`;
+                    tileEl.textContent = tile.value;
+
+                    // 添加提示
+                    const tooltip = document.createElement('div');
+                    tooltip.className = 'tooltip';
+                    tooltip.textContent = `${tile.suit}${tile.value}`;
+                    tileEl.appendChild(tooltip);
+
+                    // 如果是最后一张弃牌，添加高亮
+                    if (gameState.last_discarded && tile.id === gameState.last_discarded.id) {
+                        tileEl.classList.add('last-discarded');
+                    }
+
+                    el.discarded.appendChild(tileEl);
+                });
+            }
+        }
+    });
+</script>
+</body>
+</html>
